@@ -3,12 +3,14 @@ import sys
 import os.path
 import optparse
 import json
+import pprint
 
 import requests
 
 from acmd import tool, log
 from acmd import OK, SERVER_ERROR, USER_ERROR
 from acmd.props import parse_properties
+import acmd.config
 
 parser = optparse.OptionParser("acmd <ls|cat|find> [options] <jcr path>")
 parser.add_option("-r", "--raw",
@@ -17,6 +19,105 @@ parser.add_option("-r", "--raw",
 parser.add_option("-f", "--fullpath",
                   action="store_const", const=True, dest="full_path",
                   help="output full paths instead of local")
+
+
+@tool('diff')
+class DiffTool(object):
+    defaultIgnorePath = [ 'rep:policy' ]
+    defaultIgnoreProps = [ 'cq:lastReplicatedBy','jcr:created', 'cq:lastReplicated', 'cq:lastReplicationAction','cq:lastModified','cq:lastModifiedBy','jcr:lastModified','jcr:createdBy', 'jcr:uuid' ]
+
+    server2 = ""
+    path = ""
+    options = None
+
+    def setopt(self,argv):
+        usage = "Usage: %prog diff [options] <server2> <jcr-path>"
+        parser = optparse.OptionParser(usage=usage)
+        parser.add_option("-r", "--raw",
+                  action="store_const", const=True, dest="raw",
+                  help="output raw response data")
+        parser.add_option("-i", "--ignore-prop",
+                  dest="ignoreProps", default=self.defaultIgnoreProps,
+                  help="which properties should be ignored")
+        parser.add_option("-I", "--ignore-path",
+                  dest="ignorePath", default=self.defaultIgnorePath,
+                  help="which path-elements should be ignored")
+        parser.add_option("-v", "--verbose",
+                  action="store_const", const=True, dest="verbose",
+                  help="show path to be done and same nodes as well")
+        self.options, args = parser.parse_args(argv)
+
+        if len(args) != 3:
+            parser.print_help()
+            sys.exit(3)
+        server2 = args[1]
+        self.path = args[2]
+
+        rcfilename = acmd.get_rcfilename()
+        config = acmd.read_config(rcfilename)
+        self.server2 = config.get_server(server2)
+
+    def execute(self, server, argv):
+        log("Executing {}".format(self.name))
+        self.setopt(argv)
+
+        try:
+            ret=self.diff_subnodes(server,self.server2,self.path)
+        except KeyboardInterrupt:
+            return 0
+
+
+    def diff_subnodes(self,server1,server2,path):
+##?? utf8 problem still not solved
+##        if type(path) == str:
+##            path = path.encode('utf-8')
+        if self.options.verbose:
+            print ". {}".format(path)
+        pp = pprint.PrettyPrinter(indent=4)
+        subnodes = list()
+
+        try:
+          nodes1 = self.get_subnodes(server1, path)
+          nodes2 = self.get_subnodes(server2, path)
+        except Exception as e:
+          pp.pprint(e)
+          return
+
+        for path_segment, data in nodes1.items():
+           if path_segment not in nodes1:
+                   nodes1[path_segment] = None
+           if path_segment not in nodes2:
+                   nodes2[path_segment] = None
+           if is_property(path_segment, nodes1[path_segment]) and is_property(path_segment,nodes2[path_segment]):
+             if path_segment not in self.options.ignoreProps:
+               if nodes1[path_segment] == nodes2[path_segment]:
+                 if self.options.verbose:
+                      print "+:{} [{}]: {}".format(path,path_segment, nodes1[path_segment]) # same properties
+               else:
+                      print "-:{} [{}]: {} <==> {}".format(path, path_segment, nodes1[path_segment],nodes2[path_segment])
+           elif is_property(path_segment, nodes1[path_segment]) or is_property(path_segment,nodes2[path_segment]):
+               print "!:{} [{}]: {} <==> {}".format(path, path_segment, nodes1[path_segment],nodes2[path_segment])
+           else:
+             if path_segment not in self.options.ignorePath:
+               path2 = os.path.join(path,path_segment)
+               if path2 not in subnodes:
+                   subnodes.append(path2)
+           del nodes1[path_segment]
+           del nodes2[path_segment]
+        if nodes2:
+           print "%:{} ??? {}".format(path,nodes2) # nodes present on server2 but not in server1
+        for path_segment in subnodes:
+           self.diff_subnodes(server1,server2,path_segment)
+
+    def get_subnodes(self,server, path):
+        url = server.url("{path}.1.json".format(path=path))
+
+        log("GETting service {}".format(url))
+        resp = requests.get(url, auth=server.auth)
+        if resp.status_code != 200:
+            raise Exception("error: Failed to get path {}{}, request returned {}\n".format(server,path, resp.status_code))
+
+        return resp.json()
 
 
 @tool('ls')

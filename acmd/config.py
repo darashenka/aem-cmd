@@ -2,8 +2,10 @@
 import ConfigParser
 from os.path import expanduser
 import os.path
+import sys
 
 import acmd.server
+from acmd import USER_ERROR, SERVER_ERROR, OK, error
 
 DEFAULT_SERVER_SETTING = 'default_server'
 
@@ -24,7 +26,9 @@ class Config(object):
 
     def get_server(self, server_name):
         if server_name not in self.servers:
-            server_name = DEFAULT_SERVER_SETTING
+            error("Server {} not defined in {}; servers={}".format(server_name,get_rcfilename(),self.servers.keys()))
+            sys.exit(acmd.USER_ERROR)
+#            server_name = DEFAULT_SERVER_SETTING
         return self.servers.get(server_name)
 
 
