@@ -25,7 +25,7 @@ class Server(object):
 
     def url(self, path):
         """ Returns a full url server from the path. """
-        return "{host}{path}".format(
+        return u"{host}{path}".format(
             host=self.host,
             path=path)
 

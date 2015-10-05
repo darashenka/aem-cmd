@@ -1,9 +1,13 @@
 # coding: utf-8
+from __future__ import unicode_literals
+
 import sys
 import os.path
 import optparse
 import json
 import pprint
+import traceback
+from random import shuffle
 
 import requests
 
@@ -12,7 +16,8 @@ from acmd import OK, SERVER_ERROR, USER_ERROR
 from acmd.props import parse_properties
 import acmd.config
 
-parser = optparse.OptionParser("acmd <ls|cat|find> [options] <jcr path>")
+
+parser = optparse.OptionParser("acmd <ls|find|dl|lsprop|setprop|rmprop> [options] <jcr path>")
 parser.add_option("-r", "--raw",
                   action="store_const", const=True, dest="raw",
                   help="output raw response data")
@@ -24,7 +29,7 @@ parser.add_option("-f", "--fullpath",
 @tool('diff')
 class DiffTool(object):
     defaultIgnorePath = [ 'rep:policy' ]
-    defaultIgnoreProps = [ 'cq:lastReplicatedBy','jcr:created', 'cq:lastReplicated', 'cq:lastReplicationAction','cq:lastModified','cq:lastModifiedBy','jcr:lastModified','jcr:createdBy', 'jcr:uuid' ]
+    defaultIgnoreProps = [ 'cq:lastReplicatedBy','jcr:created', 'cq:lastReplicated', 'cq:lastReplicationAction','cq:lastModified','cq:lastModifiedBy','jcr:lastModified','jcr:createdBy', 'jcr:uuid', 'jcr:mixinTypes', 'jcr:versionHistory' ]
 
     server2 = ""
     path = ""
@@ -37,14 +42,28 @@ class DiffTool(object):
                   action="store_const", const=True, dest="raw",
                   help="output raw response data")
         parser.add_option("-i", "--ignore-prop",
-                  dest="ignoreProps", default=self.defaultIgnoreProps,
-                  help="which properties should be ignored")
+                  dest="ignoreProps", default=self.defaultIgnoreProps, action="append",
+                  help="add properties to be ignored. default: %default")
+        parser.add_option("-z", "--reset-prop",
+                  dest="ignoreProps", const="", action="store_const",
+                  help="Zero/reset properties to be ignored")
         parser.add_option("-I", "--ignore-path",
-                  dest="ignorePath", default=self.defaultIgnorePath,
-                  help="which path-elements should be ignored")
+                  dest="ignorePath", default=self.defaultIgnorePath, action="append",
+                  help="add path-elements should be ignored. default: %default")
+        parser.add_option("-Z", "--reset-path",
+                  dest="ignorePath", const="", action="store_const",
+                  help="Zero/reset path-elements to be ignored")
+
         parser.add_option("-v", "--verbose",
                   action="store_const", const=True, dest="verbose",
-                  help="show path to be done and same nodes as well")
+                  help="show same properties")
+        parser.add_option("-p", "--progress",
+                  action="store_const", const=True, dest="progress",
+                  help="show path to be done")
+        parser.add_option("-R", "--random",
+                  action="store_const", const=True, dest="random",
+                  help="Randomize pathes")
+
         self.options, args = parser.parse_args(argv)
 
         if len(args) != 3:
@@ -69,9 +88,9 @@ class DiffTool(object):
 
     def diff_subnodes(self,server1,server2,path):
 ##?? utf8 problem still not solved
-##        if type(path) == str:
-##            path = path.encode('utf-8')
-        if self.options.verbose:
+#        if type(path) == str:
+#            path = path.encode('utf-8')
+        if self.options.progress:
             print ". {}".format(path)
         pp = pprint.PrettyPrinter(indent=4)
         subnodes = list()
@@ -81,6 +100,7 @@ class DiffTool(object):
           nodes2 = self.get_subnodes(server2, path)
         except Exception as e:
           pp.pprint(e)
+          print(traceback.format_exc())
           return
 
         for path_segment, data in nodes1.items():
@@ -106,14 +126,23 @@ class DiffTool(object):
            del nodes2[path_segment]
         if nodes2:
            print "%:{} ??? {}".format(path,nodes2) # nodes present on server2 but not in server1
+
+        if self.options.random:
+           shuffle(subnodes)
         for path_segment in subnodes:
            self.diff_subnodes(server1,server2,path_segment)
 
     def get_subnodes(self,server, path):
-        url = server.url("{path}.1.json".format(path=path))
+        url = server.url("{}.1.json".format(path))
 
         log("GETting service {}".format(url))
         resp = requests.get(url, auth=server.auth)
+        if self.options.raw:
+            print "{} {} {}".format(resp.url,resp.status_code,resp.encoding)
+            print "{}".format(resp.text)
+            if resp.status_code == 200:
+               print "{}".format(resp.json())
+
         if resp.status_code != 200:
             raise Exception("error: Failed to get path {}{}, request returned {}\n".format(server,path, resp.status_code))
 
@@ -128,6 +157,7 @@ class ListTool(object):
 
     def execute(self, server, argv):
         log("Executing {}".format(self.name))
+        parser.set_usage("%prog ls [jcr-path]")
         options, args = parser.parse_args(argv)
         if len(args) >= 2:
             path = args[1]
@@ -166,9 +196,34 @@ def _list_path(path):
     sys.stdout.write("{path}\n".format(path=path))
 
 
-@tool('cat')
+@tool('dl')
+class DownloadTool(object):
+    def execute(self, server, argv):
+        parser.set_usage("%prog dl <jcr-path>")
+        options, args = parser.parse_args(argv)
+        if len(args) >= 2:
+            path = args[1]
+            return dl_node(server, options, path)
+        else:
+            ret = OK
+            for line in sys.stdin:
+                ret = ret | dl_node(server, options, line.strip())
+            return ret
+
+def dl_node(server, options, path):
+    url = server.url("{path}".format(path=path))
+    resp = requests.get(url, auth=server.auth)
+    if resp.status_code != 200:
+        sys.stderr.write("error: Failed to get path {}, request returned {}\n".format(path, resp.status_code))
+        return SERVER_ERROR
+    data = resp.text
+    sys.stdout.write("{}\n".format(data))
+    return OK
+
+@tool('lsprop')
 class InspectTool(object):
     def execute(self, server, argv):
+        parser.set_usage("%prog lsprop <jcr-path>   # show properties")
         options, args = parser.parse_args(argv)
         if len(args) >= 2:
             path = args[1]
@@ -191,16 +246,46 @@ def cat_node(server, options, path):
         sys.stdout.write("{}\n".format(json.dumps(data, indent=4)))
     else:
         for prop, data in data.items():
-            if is_property(prop, data):
-                if type(data) == str:
-                    data = data.encode('utf-8')
-                sys.stdout.write(u"{key}:\t{value}\n".format(key=prop, value=data))
+            print_property(prop, data)
     return OK
+
+def print_property_value(data):
+    if type(data) == str:
+        data = data.encode('utf-8')
+        sys.stdout.write(data)
+
+    elif type(data) == unicode:
+        sys.stdout.write(data)
+
+    elif type(data) == list:
+        sys.stdout.write('[ ')
+        first=True
+        for i in data:
+            if not first:
+                sys.stdout.write(', ')
+            else:
+                first=False
+            print_property_value(i)
+        sys.stdout.write(' ]')
+    else:
+        sys.stdout.write("{}".format(data))
+
+def print_property(name,data):
+    if not is_property(name, data):
+        return
+
+    if type(data) == str or type(data) == unicode:
+        sys.stdout.write("{}:\t".format(name))
+    else: 
+        sys.stdout.write("{}[{}]:\t".format(name,type(data)))
+    print_property_value(data)
+    sys.stdout.write("\n")
 
 
 @tool('find')
 class FindTool(object):
     def execute(self, server, argv):
+        parser.set_usage("%prog find [jcr-path]   # show all subnodes of the node")
         options, args = parser.parse_args(argv)
 
         try:
@@ -248,6 +333,7 @@ class RmTool(object):
     """
 
     def execute(self, server, argv):
+        parser.set_usage("%prog rm [jcr-path]   # remove node")
         options, args = parser.parse_args(argv)
         if len(args) >= 2:
             path = args[1]
@@ -277,6 +363,7 @@ class SetPropertyTool(object):
     """ curl -u admin:admin -X POST --data test=sample  http://localhost:4502/content/geometrixx/en/toolbar/jcr:content """
 
     def execute(self, server, argv):
+        parser.set_usage("%prog setprop 'prop1=\"val1\",prop2=val3' <jcr-path>")
         options, args = parser.parse_args(argv)
         props = parse_properties(args[1])
         if len(args) >= 3:

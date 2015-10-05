@@ -1,6 +1,5 @@
 # coding: utf-8
 import os
-import os.path
 import sys
 import optparse
 
@@ -10,7 +9,7 @@ USAGE = """acmd [options] <tool> <args>
     Run 'acmd help' for list of available tools"""
 
 parser = optparse.OptionParser(USAGE)
-parser.add_option("-s", "--server", dest="server",default="default_server",
+parser.add_option("-s", "--server", dest="server",default=os.getenv("ACMD_SERVER","default_server"),
                   help="server name", metavar="<name>")
 parser.add_option("-X", "--verbose",
                   action="store_const", const=True, dest="verbose",

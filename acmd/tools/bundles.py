@@ -8,7 +8,7 @@ import requests
 from acmd import tool, log, error
 from acmd.tools import get_command, get_argument
 
-parser = optparse.OptionParser("acmd bundle [options] [list|start|stop] [<bundle>]")
+parser = optparse.OptionParser("%prog bundles [options] [list|start|stop] [<bundle>]")
 parser.add_option("-r", "--raw",
                   action="store_const", const=True, dest="raw",
                   help="output raw response data")
