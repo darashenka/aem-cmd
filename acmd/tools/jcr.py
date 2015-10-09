@@ -327,6 +327,39 @@ def is_property(_, data):
     return not isinstance(data, dict)
 
 
+@tool('cp')
+class CpTool(object):
+
+    def execute(self, server, argv):
+        parser.set_usage("%prog cp <src-jcr-path> [src-jcr-path...] [dst-jcr-path]   # copy nodes")
+        options, args = parser.parse_args(argv)
+        if len(args) < 3:
+            parser.print_help()
+            sys.exit(3)
+        args.pop(0)
+        dst = args.pop()
+
+        data = { ":operation": "copy", ":dest" : dst }
+        if len(args) == 1:
+           url = server.url(args.pop())
+        else:
+           url = server.url("/tmp/nonexistent")
+           data[ ":applyTo" ] = list()
+           for i in args:
+              data[ ":applyTo" ].append(i)
+
+        resp = requests.post(url, auth=server.auth,data=data)
+        if resp.status_code != 200 and resp.status_code != 201:
+            sys.stderr.write("error: Failed to copy, request returned {}\n".format(resp.status_code))
+            return SERVER_ERROR
+        if options.raw:
+            sys.stdout.write("{}\n".format(resp.content))
+        else:
+            sys.stdout.write("{}\n".format(dst))
+        return OK
+
+
+
 @tool('mv')
 class MvTool(object):
 
@@ -339,24 +372,23 @@ class MvTool(object):
         args.pop(0)
         dst = args.pop()
 
-    data = { ":operation": "move", ":dest" : dst }
-    if len(args) == 1:
-       url = server.url(args.pop())
-    else
-       url = server.url("/tmp/nonexistent")
-       data[ ":applyTo" ] = list()
-       for i in args:
-         data[ ":applyTo" ].append(i)
+        data = { ":operation": "move", ":dest" : dst }
+        if len(args) == 1:
+           url = server.url(args.pop())
+        else:
+           url = server.url("/tmp/nonexistent")
+           data[ ":applyTo" ] = list()
+           for i in args:
+             data[ ":applyTo" ].append(i)
 
-    resp = requests.post(url, auth=server.auth,data=data)
-    if resp.status_code != 200 and resp.status_code != 201:
-        sys.stderr.write("error: Failed to move, request returned {}\n".format(resp.status_code))
-        return SERVER_ERROR
-    if options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
-    else:
-        sys.stdout.write("{}\n".format(dst))
-    return OK
+        resp = requests.post(url, auth=server.auth,data=data)
+        if resp.status_code != 200 and resp.status_code != 201:
+            sys.stderr.write("error: Failed to move, request returned {}\n".format(resp.status_code))
+            return SERVER_ERROR
+        if options.raw:
+            sys.stdout.write("{}\n".format(resp.content))
+        else:
+            sys.stdout.write("{}\n".format(dst))
         return OK
 
 
