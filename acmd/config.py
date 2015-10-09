@@ -39,9 +39,10 @@ def parse_server(parser, section):
     host = parser.get(section, 'host')
     host = os.path.expandvars(host)
 
-    username = parser.get(section, 'username')
-    password = parser.get(section, 'password')
-    if not username or not password:
+    if parser.has_option(section, 'username'):
+        username = parser.get(section, 'username')
+        password = parser.get(section, 'password')
+    else:
         if os.getenv("AEM_AUTH"):
             (username,password) = os.getenv("AEM_AUTH").split(":")
         else:
