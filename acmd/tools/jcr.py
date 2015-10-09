@@ -179,8 +179,8 @@ def list_node(server, options, path):
 
 
 def _list_nodes(path, nodes, full_path=False):
-    for path_segment, data in nodes.items():
-        if not is_property(path_segment, data):
+    for path_segment in sorted(nodes):
+        if not is_property(path_segment, nodes[path_segment]):
             _list_node(path, path_segment, full_path)
 
 
