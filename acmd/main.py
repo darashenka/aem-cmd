@@ -11,10 +11,10 @@ USAGE = """acmd [options] <tool> <args>
 parser = optparse.OptionParser(USAGE)
 parser.add_option("-s", "--server", dest="server",default=os.getenv("ACMD_SERVER","default_server"),
                   help="server name", metavar="<name>")
-parser.add_option("-X", "--verbose",
+parser.add_option("-v", "--verbose",
                   action="store_const", const=True, dest="verbose",
                   help="verbose logging useful for debugging")
-parser.add_option("-v", "--version",
+parser.add_option("-V", "--version",
                   action="store_const", const=True, dest="show_version",
                   help="Show package version")
 
@@ -37,20 +37,23 @@ def load_projects(projects):
 def run(options, config, args, cmdargs):
     tool_name, args = args[1], []
     server = config.get_server(options.server)
+    if server is None:
+        sys.stderr.write("error: server '{srv}' not found.\n".format(srv=options.server))
+        return acmd.USER_ERROR
     acmd.log("Using server {}".format(server))
     cmd = acmd.get_tool(tool_name)
     if cmd is None:
         sys.stderr.write("error: tool '{cmd}' not found.\n".format(cmd=tool_name))
-        return 1
+        return acmd.USER_ERROR
     else:
         return cmd.execute(server, cmdargs)
 
 
 def split_argv(argv):
     """ Split argument list into system arguments before the tool
-    and tool arguments afterwards.
-    ['foo', 'bar', 'inspect', 'bink', 'bonk']
-        => (['foo', 'bar', 'inspect'], ['inspect', 'bink', 'bonk'])"""
+        and tool arguments afterwards.
+        ['foo', 'bar', 'inspect', 'bink', 'bonk']
+            => (['foo', 'bar', 'inspect'], ['inspect', 'bink', 'bonk'])"""
     for i, arg in enumerate(argv):
         if acmd.get_tool(arg) is not None:
             return argv[0:i + 1], argv[i:]

@@ -3,10 +3,11 @@ import sys
 import optparse
 from distutils.version import LooseVersion
 from xml.etree import ElementTree
-from acmd import tool, error, log
-from acmd import OK, USER_ERROR, SERVER_ERROR
 
 import requests
+
+from acmd import tool, error, log
+from acmd import OK, USER_ERROR, SERVER_ERROR
 
 SERVICE_PATH = '/crx/packmgr/service.jsp'
 
@@ -21,6 +22,9 @@ parser.add_option("-r", "--raw",
 parser.add_option("-c", "--compact",
                   action="store_const", const=True, dest="compact",
                   help="output only package name")
+parser.add_option("-i", "--install",
+                  action="store_const", const=True, dest="install",
+                  help="install package after upload")
 
 
 @tool('packages', ['list', 'build', 'install', 'download', 'upload', 'uninstall' ])
@@ -30,10 +34,10 @@ class PackagesTool(object):
 
         action = get_action(args)
         actionarg = get_argument(args)
+
         if action == 'list' or action == 'ls':
             return list_packages(server, options)
-
-        if actionarg is None:
+        elif actionarg is None:
             parser.print_help()
             return USER_ERROR
         elif action == 'build':
@@ -65,26 +69,40 @@ def get_argument(argv):
         return argv[2]
 
 
-def get_packages_list(server, raw=False):
+def make_packages_request(server):
     url = server.url(SERVICE_PATH)
     form_data = {'cmd': (None, 'ls')}
     resp = requests.post(url, auth=(server.username, server.password), files=form_data)
     if resp.status_code != 200:
         raise Exception("Failed to get " + url)
-    if raw:
-        sys.stdout.write(resp.content + '\n')
-    tree = ElementTree.fromstring(resp.content)
+    return resp.content
+
+
+def get_packages_list(server):
+    content = make_packages_request(server)
+    tree = ElementTree.fromstring(content)
     return parse_packages(tree)
 
 
 def list_packages(server, options):
-    packages = get_packages_list(server, options.raw)
-    for pkg in packages:
-        if options.compact:
-            msg = "{pkg}\n".format(pkg=pkg['name'])
-        else:
-            msg = "{g}\t{pkg}\t{v}\n".format(g=pkg['group'], pkg=pkg['name'], v=pkg['version'])
-        sys.stdout.write(msg)
+    content = make_packages_request(server)
+
+    if options.raw:
+        sys.stdout.write(content)
+    else:
+        tree = ElementTree.fromstring(content)
+        packages = parse_packages(tree)
+        for pkg in packages:
+            if options.compact:
+                msg = "{pkg}".format(pkg=pkg['name'])
+            else:
+                msg = format_package(pkg)
+            sys.stdout.write("{}\n".format(msg))
+    return OK
+
+
+def format_package(pkg):
+    return "{g}\t{pkg}\t{v}".format(g=pkg['group'], pkg=pkg['name'], v=pkg['version'])
 
 
 def parse_packages(tree):
@@ -159,15 +177,24 @@ def download_package(server, options, package_name):
         return SERVER_ERROR
 
 
+def json_bool(val):
+    """ Returns the string 'true' if val is boolean is True """
+    if val is True:
+        return 'true'
+    else:
+        return 'false'
+
+
 def upload_package(server, options, filename):
     """ curl -u admin:admin -F file=@"name of zip file" -F name="name of package"
             -F force=true -F install=false http://localhost:4505/crx/packmgr/service.jsp """
     form_data = dict(
         file=(filename, open(filename, 'rb'), 'application/zip', dict()),
         name=filename.rstrip('.zip'),
-        force='false',
-        install='false'
+        force=json_bool(options.install),
+        install=json_bool(options.install)
     )
+    log(form_data)
     url = server.url(SERVICE_PATH)
     resp = requests.post(url, auth=server.auth, files=form_data)
 
@@ -176,6 +203,11 @@ def upload_package(server, options, filename):
         return SERVER_ERROR
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))
+    else:
+        tree = ElementTree.fromstring(resp.content)
+        pkg_elem = tree.find('response').find('data').find('package')
+        pkg = parse_package(pkg_elem)
+        sys.stdout.write("{}\n".format(format_package(pkg)))
     return OK
 
 
@@ -196,8 +228,12 @@ def install_package(server, options, package_name):
     if resp.status_code != 200:
         error("Failed to install package: {}".format(resp.content))
         return SERVER_ERROR
+    data = resp.json()
+    assert data['success'] is True
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))
+    else:
+        sys.stdout.write("{}\n".format(data['msg']))
     return OK
 
 def uninstall_package(server, options, package_name):

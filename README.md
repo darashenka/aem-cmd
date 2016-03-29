@@ -15,7 +15,7 @@ Mostly it depends on the Sling json apis for interfacing.
 acmd is available in PyPI. To install, simply call pip like any other python
 package.
 
-    $ pip instal aem-cmd
+    $ pip install aem-cmd
     ...
     $ acmd
     Usage: acmd [options] <tool> <args>
@@ -78,7 +78,7 @@ as separate commands.
 
 #### List subpaths:
 
-    $ amcd ls /
+    $ acmd ls /
     index.servlet
     bundles
     rep:policy
@@ -113,14 +113,22 @@ as separate commands.
 
 
 Multiple properties can be set comma separated. Just quote the values if there
-are commas or spaces in the values.
+are commas or spaces in the values. Quoting will also force the type to string, otherwise
+rudimentary type inference is performed recognizing numbers and booleans.
 
     $ acmd setprop prop1="I like cheese",prop2="I also like wine" /content/catalog/product4711
 
-The setprop tool also takes paths on stdin. The folling line sets the property
+The setprop tool also takes paths on stdin. The following line sets the property
 on all nodes under /content/catalog
 
     $ acmd find /content/catalog | acmd setprop prop="I like cheese"
+
+#### Create node
+
+Note that the setprop command will create the path if it does not exist. The
+following will create a new folder:
+
+    $ acmd setprop jcr:primaryType=sling:Folder /content/new_folder
 
 #### Delete property
 
@@ -131,6 +139,9 @@ Works very similar to setprop, takes multiple paths on stdin and can take
 multiple comma separated property names as prop0,prop1,prop2.
 
 #### Search for properties
+
+The search tool uses the AEM query API to find nodes which contain a given property
+value.
 
     $ acmd search serial_nbr=1234
     /content/catalog/product4711
@@ -149,9 +160,11 @@ The rm tool if given no argument will read node paths from standard input.
 
 ### Packages
 
-The packages tool support up- and downloading, installing and uninstalling
+The packages tool supports up- and downloading, installing and uninstalling
 packages. If you install the bash completion script, package names will be
-autocompleted.
+autocompleted. In addition to autocomplete the tool also automatically finds
+group and version of the latest package so only the simple package name needs
+to be supplied as argument.
 
 #### List packages
 
@@ -183,9 +196,9 @@ overlaying grops or you want a specific version you may specify them using the
 
 #### Upload package
 
+You may install a properly generated package zip e.g. downloaded from another instance.
+
     $ acmd packages upload new-catalog-1.0.zip
-
-
 
 
 ### Users tool
@@ -214,7 +227,7 @@ overlaying grops or you want a specific version you may specify them using the
     ....
 
 The list action is the default action of the groups tool so ```acmd groups```
-will actually suffice.
+will suffice.
 
 #### Create group
 
@@ -230,7 +243,9 @@ will actually suffice.
 ### Bundles
 
 The bundles tool can list, start and stop jackrabbit OSGi bundles. If you
-install the bash completion script bundle names will be autocompleted.
+install the bash completion script bundle names will be autocompleted. Like
+the packages tool, the group and version of the bundle will be inferred
+for all commands.
 
 #### List bundles
 
@@ -269,14 +284,22 @@ All bundles commands support the --raw flag which prints raw json output.
     }
     $
 
+### Groovy
 
+Note: the groovy tool requires the
+[cq-groovy-console](https://github.com/Citytechinc/cq-groovy-console) bundle
+from Citytech.
 
-### Replication
+The groovy tool allows execution of arbitrary code server side. Put your code
+in a file and execute with:
 
-Activate tree:
+    $ acmd groovy list-entire-catalog.groovy
+    ....
 
-    $ acmd replication activate /content/catalog
-    Activated 130 of 130 resources in 4 seconds.
+For more documentation on how to write groovy scripts install the
+cq-groovy-console bundle and go to
+[http://localhost:4502/etc/groovyconsole.html](http://localhost:4502/etc/groovyconsole.html)
+
 
 ### Storage
 
@@ -333,21 +356,6 @@ flag. Like for example
     $ acmd -s prod-author bundles
     ....
 
-#### Dispatcher
-
-Since the dispatcher service is not always accessible at the same host as the
-normal service an extra setting 'dispatcher' can be added to the config like so.
-
-    [server publish]
-    host=http://publish.prod-backend.com:4502
-    dispatcher=http://publish.public-access.com
-
-No you can clear the dispatcher cache without adding extra servers for the
-dispatcher.
-
-    $ acmd -s publish dispatcher clear
-
-
 ### Projects
 
 The projects section enables you to add project specific tools you your
@@ -378,16 +386,20 @@ Nevertheless here is boilerplate for creating a new tool.
 # coding: utf-8
 from acmd.tool import tool
 
-@tool('catalog')
+@tool('catalog', ['inspect', 'upload'])
 class CatalogTool(object):
     def execute(self, server, argv):
         sys.stdout.write("Hello, world.\n")
 ```
 
 There are two essential parts here. The ```@tool``` decorator takes care of
-declaring the tool so it can be found but acmd. The argument is the label used
-for the tool on the command line. Note that for custom tools declared under
-```[projects]``` a prefix will be added to the tool name.
+declaring the tool so it can be found by acmd. The first argument is the label used
+for the tool on the command line. Note that for custom tools declared
+under ```[projects]``` a prefix will be added to the tool name. The second
+argument is a list of commands available under the tool. Remember that under
+normal circumstances the tool represents a resource and the first argument is
+a command to perform on that resource. This list is used for autocompletion and
+can be omitted for simpler tools.
 
 The ```execute()``` method takes a server argument
 containing all info on the currently selected server and argv is a list of

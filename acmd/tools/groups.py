@@ -5,12 +5,10 @@ import optparse
 
 import requests
 
-from lxml import html
 
-from acmd import tool
+from acmd import tool, html
 from acmd import USER_ERROR, SERVER_ERROR, OK, error
-from acmd.tools.tool_utils import get_action, get_argument, filter_system
-
+from acmd.tools import get_command, get_argument, filter_system
 
 parser = optparse.OptionParser("acmd groups <list|create|adduser> [options] <groupname> <username>")
 parser.add_option("-r", "--raw",
@@ -25,7 +23,7 @@ parser.add_option("-c", "--compact",
 class GroupsTool(object):
     def execute(self, server, argv):
         options, args = parser.parse_args(argv)
-        action = get_action(args, 'list')
+        action = get_command(args, 'list')
         groupname = get_argument(args)
         if action == 'list':
             return list_groups(server, options)
@@ -56,8 +54,7 @@ def create_group(server, options, name):
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))
     else:
-        tree = html.fromstring(resp.text)
-        path = tree.xpath('//div[@id="Path"]/text()')[0]
+        path = html.parse_value(resp.text, 'div', 'Path')
         sys.stdout.write("{}\n".format(path))
     return OK
 
@@ -80,8 +77,7 @@ def add_user(server, options, groupname, username):
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))
     else:
-        tree = html.fromstring(resp.text)
-        path = tree.xpath('//div[@id="Path"]/text()')[0]
+        path = html.parse_value(resp.text, 'div', 'Path')
         sys.stdout.write("{}\n".format(path))
     return OK
 
