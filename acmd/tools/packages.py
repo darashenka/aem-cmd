@@ -27,7 +27,7 @@ parser.add_option("-i", "--install",
                   help="install package after upload")
 
 
-@tool('packages', ['list', 'build', 'install', 'download', 'upload', 'uninstall' ])
+@tool('packages', ['list', 'build', 'install', 'download', 'upload', 'uninstall', 'delete' ])
 class PackagesTool(object):
     def execute(self, server, argv):
         options, args = parser.parse_args(argv)
@@ -50,6 +50,8 @@ class PackagesTool(object):
             return upload_package(server, options, actionarg)
         elif action == 'uninstall':
             return uninstall_package(server, options, actionarg)
+        elif action == 'delete':
+            return delete_package(server, options, actionarg)
         else:
             sys.stderr.write('error: Unknown packages action {a}\n'.format(a=action))
             return USER_ERROR
@@ -243,7 +245,20 @@ def uninstall_package(server, options, package_name):
     log("Uninstalling package with POST to {}".format(url))
     resp = requests.post(url, auth=server.auth, data=form_data)
     if resp.status_code != 200:
-        error("Failed to install package: {}".format(resp.content))
+        error("Failed to uninstall package: {}".format(resp.content))
+        return SERVER_ERROR
+    if options.raw:
+        sys.stdout.write("{}\n".format(resp.content))
+    return OK
+
+def delete_package(server, options, package_name):
+    url = get_package_url(package_name, server, options)
+    form_data = dict(cmd='delete')
+
+    log("Deleting package with POST to {}".format(url))
+    resp = requests.post(url, auth=server.auth, data=form_data)
+    if resp.status_code != 200:
+        error("Failed to delete package: {}".format(resp.content))
         return SERVER_ERROR
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))
