@@ -1,6 +1,8 @@
 # coding: utf-8
-import ConfigParser
-from os.path import expanduser
+""" Support for reading .acmd.rc config files. """
+
+from configparser import ConfigParser
+
 import os.path
 import sys
 
@@ -83,29 +85,23 @@ def parse_projects(parser):
     ret = dict()
     if parser.has_section('projects'):
         for name, path in parser.items('projects'):
-            path = expanduser(path)
+            path = os.path.expanduser(path)
             ret[name] = path
     return ret
 
 
-_current_config = None
-
-
-def get_current_config():
-    """ Return the loaded Config() object. """
-    global _current_config
-    return _current_config
-
-
 def read_config(filename):
     """ Read the config file filename. Return a Config() object. """
-    global _current_config
-    parser = ConfigParser.ConfigParser()
+    parser = ConfigParser()
     with open(filename) as f:
-        parser.readfp(f, "utf-8")
+        parser.read_file(f, "utf-8")
 
     config = Config()
     config.servers = parse_servers(parser)
     config.projects = parse_projects(parser)
-    _current_config = config
     return config
+
+
+def is_encrypted(password):
+    """ Returns true if password string is encrypted. """
+    return password.startswith('{') and password.endswith('}')

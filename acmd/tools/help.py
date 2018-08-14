@@ -1,13 +1,13 @@
 # coding: utf-8
 """ Tools for bash command completion are hidden from normal listings. """
-import sys
 import optparse
+import sys
 
-from acmd import tool, get_current_config, OK
-from acmd import get_tool
-from acmd import list_tools
+from acmd import error, USER_ERROR
+from acmd import tool, OK
 from acmd.config import DEFAULT_SERVER_SETTING
-from acmd.tools import get_command
+from acmd import tool_repo
+from acmd.tools import get_action
 
 parser = optparse.OptionParser("acmd bundle [options] [list|start|stop] [<bundle>]")
 parser.add_option("-c", "--compact",
@@ -17,33 +17,46 @@ parser.add_option("-c", "--compact",
 
 @tool('help')
 class IntrospectTool(object):
+    def __init__(self, config=None):
+        self.config = config
+
     @property
     def commands(self):
         """ Allow autocomplete of help tools. """
-        return list_tools()
+        return tool_repo.list_tools()
+
+    @commands.setter
+    def commands(self, commands):
+        """ Ignore trying to set commands for this tool """
+        pass
 
     def execute(self, _, argv):
         (options, args) = parser.parse_args(argv)
 
-        arg = get_command(args, '_tools')
+        arg = get_action(args, '_tools')
         if arg == '_tools':
             print_tools(sys.stdout, options.compact)
         elif arg == '_servers':
-            print_servers(sys.stdout)
+            print_servers(sys.stdout, self.config)
         else:
-            _tool = get_tool(arg)
+            _tool = tool_repo.get_tool(arg)
+            _module = tool_repo.get_module(arg)
             if options.compact:
                 for cmd in _tool.commands:
                     sys.stdout.write("{}\n".format(cmd))
             else:
-                sys.stdout.write("Available commands:\n")
-                for cmd in _tool.commands:
-                    sys.stdout.write("    {}\n".format(cmd))
-            return OK
+                if hasattr(_module, 'parser'):
+                    _module.parser.print_help()
+                else:
+                    sys.stdout.write("Available commands:\n")
+                    for cmd in _tool.commands:
+                        sys.stdout.write("\t{}\n".format(cmd))
+        return OK
 
 
-def print_servers(f):
-    config = get_current_config()
+def print_servers(f, config=None):
+    if config is None:
+        return
     for name, _ in config.servers.items():
         if name != DEFAULT_SERVER_SETTING:
             f.write("{}\n".format(name))
@@ -51,9 +64,9 @@ def print_servers(f):
 
 def print_tools(f, compact):
     if compact:
-        for arg in list_tools():
+        for arg in tool_repo.list_tools():
             f.write("{cmd}\n".format(cmd=arg))
     else:
         sys.stdout.write("Available tools:\n")
-        for arg in list_tools():
+        for arg in tool_repo.list_tools():
             f.write("    {cmd}\n".format(cmd=arg))

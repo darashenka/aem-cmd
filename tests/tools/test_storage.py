@@ -1,14 +1,13 @@
 # coding: utf-8
-# coding: utf-8
-from StringIO import StringIO
-
 from mock import patch
 from httmock import urlmatch, HTTMock
 
 from nose.tools import eq_
 
 from acmd.tools import storage
-from acmd import get_tool, Server
+from acmd import tool_repo, Server
+
+from test_utils.compat import StringIO
 
 
 @urlmatch(netloc='localhost:4502',
@@ -37,7 +36,7 @@ def mock_gc_service(url, request):
 @patch('sys.stdout', new_callable=StringIO)
 def test_storage_gc(stdout):
     with HTTMock(mock_gc_service):
-        tool = get_tool('storage')
+        tool = tool_repo.get_tool('storage')
         server = Server('localhost')
         tool.execute(server, ['storage', '--raw', 'gc'])
         eq_('gc started', stdout.getvalue())
@@ -46,7 +45,7 @@ def test_storage_gc(stdout):
 @patch('sys.stdout', new_callable=StringIO)
 @patch('sys.stderr', new_callable=StringIO)
 def test_print_help(stdout, stderr):
-    tool = get_tool('storage')
+    tool = tool_repo.get_tool('storage')
     server = Server('localhost')
     tool.execute(server, ['storage'])
     eq_('', stdout.getvalue())

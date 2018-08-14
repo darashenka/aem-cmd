@@ -3,12 +3,12 @@
     hooks so we deploy necessary system files here.
 """
 import sys
-import os.path
+import os
 import platform
 import subprocess
-from distutils.version import LooseVersion
-
 import pkg_resources
+
+from distutils.version import LooseVersion
 
 import acmd
 
@@ -28,6 +28,7 @@ def setup_rcfile(rcfilename):
         acmd.warning("Overwriting {}".format(rcfilename))
     target = open(rcfilename, 'wb')
     target.write(template)
+    target.close()
 
 
 def _read_config_template():
@@ -74,13 +75,13 @@ def install_script(path):
 def _get_bash_version():
     """ Find version of bash currently running. """
     try:
-        full_text = subprocess.check_output(['bash', '--version'])
+        full_text = subprocess.check_output(['bash', '--version']).decode('utf-8')
         first_line = full_text.split('\n')[0]
         version_string = first_line.lstrip("GNU bash, version ")
         major = LooseVersion(version_string).version[0]
         return major
     except Exception as e:
-        acmd.log("No bash was found: " + e.message)
+        acmd.log("No bash was found: {}".format(e))
         return 0
 
 

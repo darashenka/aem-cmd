@@ -2,22 +2,22 @@
 from __future__ import unicode_literals
 
 import sys
-import os.path
 import optparse
 import json
 import pprint
 import traceback
 from random import shuffle
+import os
+import sys
 
 import requests
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 
-from acmd import tool, log
 from acmd import OK, SERVER_ERROR, USER_ERROR
-from acmd.props import parse_properties
-import acmd.config
+from acmd import tool, log, error
+from acmd.util.props import parse_properties, format_multipart
 
-
-parser = optparse.OptionParser("acmd <ls|find|dl|lsprop|setprop|rmprop> [options] <jcr path>")
+parser = optparse.OptionParser("acmd <ls|cat|find|mv|setprop|rmprop|lsprop> [options] <jcr path>")
 parser.add_option("-r", "--raw",
                   action="store_const", const=True, dest="raw",
                   help="output raw response data")
@@ -155,16 +155,20 @@ class ListTool(object):
         a jcr tool into separate smaller tools for ease of use.
     """
 
-    def execute(self, server, argv):
-        log("Executing {}".format(self.name))
+    @staticmethod
+    def execute(server, argv):
         parser.set_usage("%prog ls [jcr-path]")
         options, args = parser.parse_args(argv)
+        log("Done {}".format(len(args)))
         if len(args) >= 2:
             path = args[1]
+            log("Listing {}".format(path))
             return list_node(server, options, path)
         else:
             ret = OK
+
             for path in sys.stdin:
+                log("Listing subpath {}".format(path))
                 ret = ret | list_node(server, options, path.strip())
             return ret
 
@@ -222,7 +226,9 @@ def dl_node(server, options, path):
 
 @tool('lsprop')
 class InspectTool(object):
-    def execute(self, server, argv):
+
+    @staticmethod
+    def execute(server, argv):
         parser.set_usage("%prog lsprop <jcr-path>   # show properties")
         options, args = parser.parse_args(argv)
         if len(args) >= 2:
@@ -241,12 +247,14 @@ def cat_node(server, options, path):
     if resp.status_code != 200:
         sys.stderr.write("error: Failed to get path {}, request returned {}\n".format(path, resp.status_code))
         return SERVER_ERROR
-    data = resp.json()
+    data = json.loads(resp.content)
     if options.raw:
         sys.stdout.write("{}\n".format(json.dumps(data, indent=4)))
     else:
         for prop, data in data.items():
-            print_property(prop, data)
+#            print_property(prop, data)
+            if is_property(prop, data):
+                sys.stdout.write("{key}:\t{value}\n".format(key=prop, value=data))
     return OK
 
 def print_property_value(data):
@@ -284,7 +292,9 @@ def print_property(name,data):
 
 @tool('find')
 class FindTool(object):
-    def execute(self, server, argv):
+
+    @staticmethod
+    def execute(server, argv):
         parser.set_usage("%prog find [jcr-path]   # show all subnodes of the node")
         options, args = parser.parse_args(argv)
 
@@ -320,7 +330,7 @@ def _get_subnodes(server, path):
         sys.stderr.write("error: Failed to get path {}, request returned {}\n".format(path, resp.status_code))
         sys.exit(-1)
 
-    return resp.json()
+    return json.loads(resp.content)
 
 
 def is_property(_, data):
@@ -398,7 +408,8 @@ class RmTool(object):
     """ curl -X DELETE http://localhost:4505/path/to/node/jcr:content/nodeName -u admin:admin
     """
 
-    def execute(self, server, argv):
+    @staticmethod
+    def execute(server, argv):
         parser.set_usage("%prog rm [jcr-path]   # remove node")
         options, args = parser.parse_args(argv)
         if len(args) >= 2:
@@ -426,9 +437,12 @@ def rm_node(server, options, path):
 
 @tool('setprop')
 class SetPropertyTool(object):
-    """ curl -u admin:admin -X POST --data test=sample  http://localhost:4502/content/geometrixx/en/toolbar/jcr:content """
+    """ curl -u admin:admin -X POST --data test=sample
+            http://localhost:4502/content/geometrixx/en/toolbar/jcr:content
+    """
 
-    def execute(self, server, argv):
+    @staticmethod
+    def execute(server, argv):
         parser.set_usage("%prog setprop 'prop1=\"val1\",prop2=val3' <jcr-path>")
         options, args = parser.parse_args(argv)
         props = parse_properties(args[1])
@@ -443,11 +457,20 @@ class SetPropertyTool(object):
 
 
 def set_node_properties(server, options, path, props):
-    """ curl -u admin:admin -X POST --data test=sample  http://localhost:4502/content/geometrixx/en/toolbar/jcr:content """
+    """ curl -u admin:admin -X POST --data test=sample
+            http://localhost:4502/content/geometrixx/en/toolbar/jcr:content
+    """
     url = server.url(path)
-    resp = requests.post(url, auth=server.auth, data=props)
+
+    multipart_data = MultipartEncoder(
+        fields=format_multipart(props)
+    )
+    resp = requests.post(url, auth=server.auth, data=multipart_data,
+                         headers={'Content-Type': multipart_data.content_type})
+
     if resp.status_code != 200:
-        sys.stderr.write("error: Failed to set property on path {}, request returned {}\n".format(path, resp.status_code))
+        sys.stderr.write(
+            "error: Failed to set property on path {}, request returned {}\n".format(path, resp.status_code))
         return SERVER_ERROR
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))
@@ -458,9 +481,12 @@ def set_node_properties(server, options, path, props):
 
 @tool('rmprop')
 class DeletePropertyTool(object):
-    """ curl -u admin:admin -X POST --data test@Delete=  http://localhost:4502/content/geometrixx/en/toolbar/jcr:content """
+    """ curl -u admin:admin -X POST --data test@Delete=
+            http://localhost:4502/content/geometrixx/en/toolbar/jcr:content
+    """
 
-    def execute(self, server, argv):
+    @staticmethod
+    def execute(server, argv):
         options, args = parser.parse_args(argv)
         if len(args) <= 1:
             parser.print_help()
@@ -483,10 +509,72 @@ def rm_node_properties(server, options, prop_names, path):
     url = server.url(path)
     resp = requests.post(url, auth=server.auth, data=props)
     if resp.status_code != 200:
-        sys.stderr.write("error: Failed to set property on path {}, request returned {}\n".format(path, resp.status_code))
+        sys.stderr.write(
+            "error: Failed to set property on path {}, request returned {}\n".format(path, resp.status_code))
         return SERVER_ERROR
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))
     else:
         sys.stdout.write("{}\n".format(path))
     return OK
+
+
+@tool('cp')
+class CopyTool(object):
+    @staticmethod
+    def execute(server, argv):
+        parser.set_usage("%prog cp <src-path> <dst-path>")
+        options, args = parser.parse_args(argv)
+        if len(args) < 3:
+            parser.print_help()
+            return USER_ERROR
+        src_path = args[1]
+        dst_path = args[2]
+        data = {":operation": "copy", ":dest": dst_path}
+
+        url = server.url(src_path)
+        resp = requests.post(url, auth=server.auth, data=data)
+        if resp.status_code != 200 and resp.status_code != 201:
+            error("Failed to copy, request returned {}".format(resp.status_code))
+            if options.raw:
+                error(resp.content)
+            return SERVER_ERROR
+
+        msg = _result_folder(src_path, dst_path) if not options.raw else resp.content
+        sys.stdout.write("{}\n".format(msg))
+        return OK
+
+
+@tool('mv')
+class MoveTool(object):
+    @staticmethod
+    def execute(server, argv):
+        options, args = parser.parse_args(argv)
+        if len(args) < 3:
+            parser.print_help()
+            return USER_ERROR
+
+        src_path = args[1]
+        dst_path = args[2]
+
+        data = {":operation": "move", ":dest": dst_path}
+
+        url = server.url(src_path)
+        resp = requests.post(url, auth=server.auth, data=data)
+        if resp.status_code != 200 and resp.status_code != 201:
+            error("Failed to copy, request returned {}".format(resp.status_code))
+            if options.raw:
+                error(resp.content)
+            return SERVER_ERROR
+
+        msg = _result_folder(src_path, dst_path) if not options.raw else resp.content
+        sys.stdout.write("{}\n".format(msg))
+        return OK
+
+
+def _result_folder(src_path, dst_path):
+    if dst_path.endswith('/'):
+        last = src_path.split('/')[-1]
+        return dst_path + last
+    else:
+        return dst_path

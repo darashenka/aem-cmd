@@ -37,6 +37,7 @@ classifiers = [
     # Specify the Python versions you support here. In particular, ensure
     # that you indicate whether you support Python 2, Python 3 or both.
     'Programming Language :: Python :: 2.7',
+    "Programming Language :: Python :: 3.6"
 ]
 
 config = {
@@ -52,8 +53,8 @@ config = {
     'classifiers': classifiers,
 
     # Build specs
-    'install_requires': ['requests'],
-    'packages': ['acmd', 'acmd.tools'],
+    'install_requires': ['requests', 'requests-toolbelt', 'configparser', 'keyring', 'keyrings.alt'],
+    'packages': ['acmd', 'acmd.tools', 'acmd.jcr', 'acmd.workflows', 'acmd.assets', 'acmd.util'],
     'package_data': {'acmd': ['data/acmd.rc.template', 'data/acmd.bash_completion']},
     'scripts': ['bin/acmd']
 }

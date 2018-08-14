@@ -5,9 +5,9 @@ import sys
 
 from acmd import tool, error
 from acmd import OK, USER_ERROR, SERVER_ERROR, INTERNAL_ERROR
-from acmd import backend
+from acmd.util import groovyconsole
 
-parser = optparse.OptionParser("acmd groups <list|create|adduser> [options] <groupname> <username>")
+parser = optparse.OptionParser("acmd groovy [options] <filename>")
 parser.add_option("-r", "--raw",
                   action="store_const", const=True, dest="raw",
                   help="output raw response data")
@@ -19,7 +19,8 @@ SERVICE_PATH = "/bin/groovyconsole/post.json"
 class GroovyTool(object):
     """ http://localhost:4502/bin/groovyconsole/post.json """
 
-    def execute(self, server, argv):
+    @staticmethod
+    def execute(server, argv):
         options, args = parser.parse_args(argv)
         if len(argv) < 2:
             parser.print_help()
@@ -27,7 +28,7 @@ class GroovyTool(object):
 
         filename = args[1]
         f = open(filename, 'r')
-        status, data = backend.execute(server, f.read(), [], raw_output=options.raw)
+        status, data = groovyconsole.execute(server, f.read(), [], raw_output=options.raw)
 
         if status != OK:
             error("Failed to run script {filename}: {content}".format(
@@ -39,16 +40,17 @@ class GroovyTool(object):
             sys.stdout.write("{}\n".format(json.dumps(data, indent=4)))
         else:
             # The stacktrace prop changed name with newer versions.
-            if backend.STACKTRACE_FIELD in data:
-                sys.stderr.write(data[backend.STACKTRACE_FIELD])
+            if groovyconsole.STACKTRACE_FIELD in data:
+                sys.stderr.write(data[groovyconsole.STACKTRACE_FIELD])
                 return SERVER_ERROR
-            elif backend.OUTPUT_FIELD in data:
-                sys.stdout.write("{}".format(data[backend.OUTPUT_FIELD].encode('utf-8')))
+            elif groovyconsole.OUTPUT_FIELD in data:
+                sys.stdout.write("{}".format(data[groovyconsole.OUTPUT_FIELD]))
             else:
                 return INTERNAL_ERROR
         return OK
 
-    def build_form_data(self, filename):
+    @staticmethod
+    def build_form_data(filename):
         f = open(filename, 'rb')
         form_data = dict(
             script=replace_vars(f.read())

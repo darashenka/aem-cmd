@@ -1,19 +1,35 @@
 # AEM Command Line Tools
 
-This is a toolset package for working with AEM and especially
-the Java Content Repository (JCR) via command line tools. It tries to utilize
-the unix philosophy by reading and writing plaintext in order
-to interoperate with common tools such as grep, cut, sed and awk.
-Mostly it depends on the Sling json apis for interfacing.
-
 [![Circle CI](https://circleci.com/gh/bjorns/aem-cmd.svg?style=svg)](https://circleci.com/gh/bjorns/aem-cmd)
+
+AEM command line tools is a toolset package for working with AEM and
+the Java Content Repository (JCR) from a shell. Aem-cmd presents a few novel
+ideas compared to other aem command line tools:
+
+* *Unix friendly* - By reading and writing plaintext aem-cmd interoperates easily
+with common tools such as grep, cut, sed and awk.
+* *Concise* - Hostnames and usernames are stored in
+config files and mere server aliases are used from the perspective of the user.
+* *Battle tested* - Aem-cmd takes care to support standard python deployments and
+does not assume the user has super user access to the deployment environment.
+* *By developers for developers* - Write your own tools in powerful python and
+re-use the configuration framework and api-libs of the aem-cmd system.
 
 ## Getting Started
 
 ### Installation
 
-acmd is available in PyPI. To install, simply call pip like any other python
-package.
+#### Quick install
+
+A quick install script is provided for convenience:
+
+    $ curl https://raw.githubusercontent.com/bjorns/aem-cmd/master/get-acmd.sh | bash
+
+Note: The install script requires sudo access.
+
+#### Manual install
+
+For manual install, acmd is available in PyPI.
 
     $ pip install aem-cmd
     ...
@@ -25,25 +41,39 @@ package.
       -h, --help            show this help message and exit
       -s str, --server=str  server name
 
-### Bash Completion
+#### User local install
 
-Acmd comes with a bash completion script but for technical reason it cannot
+If you do not have sudo access and your user does not have write access to the
+default python paths you can make a user local installation with:
+
+    $ pip install --user aem-cmd
+
+When running this installation directory becomes $(HOME)/.local/bin. Usually
+this path is then covered in PATH but it may be necessary to add it to your
+.bashrc. A quick install script is available for user installs at
+
+    $ curl https://raw.githubusercontent.com/bjorns/aem-cmd/master/get-acmd-user.sh | bash
+
+#### Bash Completion
+
+aem-cmd comes with a bash completion script but for technical reasons it cannot
 be installed by pip so to install it use the install_bash_completion command.
 
     $ sudo acmd install_bash_completion
     Password:
     Installed bash completion script in /etc/bash_completion.d
 
-The bash completion works best in bash 4. Due to licensing issues Mac OS still
-comes with bash 3 by default but it is possible to upgrade. See
+Note 1: The bash completion works best in bash 4. Due to licensing issues macOS
+still comes with bash 3 by default but it is possible to upgrade. See
 [here](http://apple.stackexchange.com/questions/24632/is-it-safe-to-upgrade-bash-via-homebrew).
 
-
+Note 2: The main quick install script automatically invokes the bash completion
+tool.
 
 
 ## Tools
 
-Acmd is built around tools. Each tool represents a resource in the system.
+aem-cmd is built around tools. Each tool represents a resource in the system.
 Packages, bundles and users each have separate tools for operating on them.
 Think of it in terms of REST services. Primarily you interact with a resource,
 not an action.
@@ -55,20 +85,24 @@ The help tool lists all installed tools
     $ acmd help
     Available tools:
       inspect
-      bundles
+      bundle
       help
-      packages
+      package
 
 To get more information on available actions call help on that tool:
 
-    $ acmd help packages
-    Available commands:
-        list
-        build
-        install
-        download
-        upload
+    $ acmd help package
+    Usage: acmd package [options] [list|build|install|upload|download] [<zip>|<package>]
 
+    Options:
+      -h, --help            show this help message and exit
+      -v VERSION, --version=VERSION
+                            specify explicit version
+      -g GROUP, --group=GROUP
+                            specify explicit group
+      -r, --raw             output raw response data
+      -c, --compact         output only package name
+      -i, --install         install package after upload
 
 
 ### JCR tools
@@ -80,7 +114,7 @@ as separate commands.
 
     $ acmd ls /
     index.servlet
-    bundles
+    bundle
     rep:policy
     services
     home
@@ -160,7 +194,7 @@ The rm tool if given no argument will read node paths from standard input.
 
 ### Packages
 
-The packages tool supports up- and downloading, installing and uninstalling
+The package-tool supports up- and downloading, installing and uninstalling
 packages. If you install the bash completion script, package names will be
 autocompleted. In addition to autocomplete the tool also automatically finds
 group and version of the latest package so only the simple package name needs
@@ -168,9 +202,9 @@ to be supplied as argument.
 
 #### List packages
 
-By default the packages tool lists all installed packages.
+By default the package tool lists all installed packages.
 
-    $ acmd packages list
+    $ acmd package list
     ...
     day/cq540/product   cq-portlet-director 5.4.38
     day/cq550/product   cq-upgrade-acl  5.5.2
@@ -186,44 +220,44 @@ The group and the latest version will be located automatically. If there are
 overlaying grops or you want a specific version you may specify them using the
 -g and -v flags.
 
-    $ acmd packages build --raw cq-upgrade-acl
+    $ acmd package build --raw cq-upgrade-acl
     {"success":true,"msg":"Package built"}
 
 #### Install package
 
-    $ acmd packages install --raw cq-upgrade-acl
+    $ acmd package install --raw cq-upgrade-acl
     {"success":true,"msg":"Package installed"}
 
 #### Upload package
 
 You may install a properly generated package zip e.g. downloaded from another instance.
 
-    $ acmd packages upload new-catalog-1.0.zip
+    $ acmd package upload new-catalog-1.0.zip
 
 
-### Users tool
+### User tool
 
 #### List Users
 
-    $ acmd users list
+    $ acmd user list
     ...
 
 #### Create Users
 
-    $ acmd users create --password=foobar jdoe
+    $ acmd user create --password=foobar jdoe
     /home/users/j/jdoe
 
 #### Set profile properties
 
-    $ acmd users setprop age=29,name="John Doe" jdoe
+    $ acmd user setprop age=29,name="John Doe" jdoe
     /home/users/j/jdoe
 
 
-### Groups tool
+### Group tool
 
 #### List groups
 
-    $ acmd groups list
+    $ acmd group list
     ....
 
 The list action is the default action of the groups tool so ```acmd groups```
@@ -231,18 +265,18 @@ will suffice.
 
 #### Create group
 
-    $ acmd groups create editors
+    $ acmd group create editors
     /home/groups/e/editors
 
 #### Add user to group
 
-    $ acmd groups adduser editors jdoe
+    $ acmd group adduser editors jdoe
     /home/groups/e/editors
 
 
 ### Bundles
 
-The bundles tool can list, start and stop jackrabbit OSGi bundles. If you
+The bundle tool can list, start and stop jackrabbit OSGi bundles. If you
 install the bash completion script bundle names will be autocompleted. Like
 the packages tool, the group and version of the bundle will be inferred
 for all commands.
@@ -251,7 +285,7 @@ for all commands.
 
 List all bundles in the system.
 
-    $ acmd bundles list
+    $ acmd bundle list
     ...
     org.apache.sling.extensions.webconsolesecurityprovider  1.0.0   Active
     org.apache.sling.jcr.jcr-wrapper    2.0.0   Active
@@ -265,19 +299,19 @@ List all bundles in the system.
 The output is tab-separated to make it easy to read specific data.
 E.g. to get the version of the bndlib bundle:
 
-    $ acmd bundles list | grep bndlib | cut -f 2
+    $ acmd bundle list | grep bndlib | cut -f 2
     1.43.0
 
 #### Stop Bundle
 
-    $ acmd bundles stop biz.aQute.bndlib
+    $ acmd bundle stop biz.aQute.bndlib
     $
 
 #### Start bundle
 
-All bundles commands support the --raw flag which prints raw json output.
+All bundle-commands support the --raw flag which prints raw json output.
 
-    $ acmd bundles start biz.aQute.bndlib --raw
+    $ acmd bundle start biz.aQute.bndlib --raw
     {
         "fragment": false,
         "stateRaw": 32
@@ -299,6 +333,48 @@ in a file and execute with:
 For more documentation on how to write groovy scripts install the
 cq-groovy-console bundle and go to
 [http://localhost:4502/etc/groovyconsole.html](http://localhost:4502/etc/groovyconsole.html)
+
+
+### Assets
+
+The assets tool controls interactions with the AEM dam.
+
+#### List assets
+
+    $ acmd asset ls /selfies
+
+lists assets and folders in /content/dam/selfies
+
+#### Find
+
+List all assets in the system
+
+    $ acmd asset find /
+
+#### Import assets
+
+The import command allows for importing single files and entire directories
+into the DAM.
+
+To import a single file into /content/dam/selfie.jpg
+
+    $ acmd asset import ~/Pictures/selfie.jpg
+
+If a directory is given it will be recreated at /content/dam
+
+    $ acmd asset import ~/Pictures/selfies
+
+will create /content/dam/selfies and import all the contents
+
+The -d flag allows for importing into a specific directory.
+
+    $ acmd asset import -d /content/dam/another_directory ~/Pictures/selfies
+
+#### Touch
+
+To trigger the Update Asset workflow for an asset
+
+    $ acmd asset touch /selfie.jpg
 
 
 ### Storage
@@ -353,7 +429,7 @@ author and publish instances in production.
 Once this is done you can easily run any command on any server via the ```-s```
 flag. Like for example
 
-    $ acmd -s prod-author bundles
+    $ acmd -s prod-author bundle
     ....
 
 ### Projects
@@ -372,6 +448,70 @@ in with the help command as custom:catalog
     $ acmd help
      ...
     custom:catalog
+
+### Encrypted passwords
+
+For many use cases it is not desireable to keep passwords in plaintext. For
+this purpose it is possible to encrypt the configuration file and use a separate
+passphrase on invocation.
+
+### Installation
+Crypto support requries the pycryptodome package which in turn requires some
+native packages. Because of this it is not installed by default. Install with
+
+    $ pip install pycryptodome
+
+or if you are using Python 3
+
+    $ pip3 install pycryptodome
+
+#### Set master passphrase
+To start set a master password. The master will be stored in the system
+keychain using the python [keyring](https://pypi.python.org/pypi/keyring#using-keyring-on-headless-linux-systems) library.
+
+    $ acmd config set-master
+    Set master passphrase:
+
+#### Invocation
+The following command will ask for a passphrase which can then be used on acmd
+invocation.
+
+    $ acmd config encrypt qa-server
+
+By default the tool encrypts the local ~/.acmd.rc file. A parameter is
+available to encrypt the password for a specific file.
+
+    $ acmd config encrypt --file=/home/jennie/.acmd.rc qa-server
+
+If you look in your rcfile after this you will notice the password section has
+changed.
+
+    [server qa-server]
+    ...
+    username = admin
+    password = {OLVoV9rxctNlCYtZuyunciQK0yXS59oyI8mnY4TuYxHg++0lB+QJ}
+
+Now as long as the master passphrase is set in the keychain you can continue to
+use aem-cmd as normal.
+
+    $ acmd ls /content/dam
+    project
+    stuff
+    other
+
+
+#### Notes on encrypted passwords
+
+- If you are on a linux system you may have to install a secure backend
+to avoid storing the master password in plaintext. Refer to the [keyring
+documentation](https://pypi.python.org/pypi/keyring#using-keyring-on-headless-linux-systems) for more details.
+
+- The brackes '{' and '}' are the signals to acmd that the password is encrypted and so do
+not use passwords with brackets at both beginning and end.
+
+- In the process of encrypting the password acmd
+will parse and rewrite the entire config file and will discard any comments
+left in the file. This is a known bug or if you will, expected behavior.
 
 ## Custom Tools
 
@@ -403,9 +543,18 @@ can be omitted for simpler tools.
 
 The ```execute()``` method takes a server argument
 containing all info on the currently selected server and argv is a list of
-tool arguments starting with the tool name. See for example the bundles tool
+tool arguments starting with the tool name. See for example the bundle-tool
 for info on how to use the optparse package to add tool specific options.
 
 And that is pretty much it. The tool does not have to have any specific name
 (though a -Tool suffix is idiomatic), and it does not have to inherit any
 specific class.
+
+
+
+## Other tools, recommendations and shoutouts
+
+* The inspiration for acmd comes from the Polopoly CMS command line tools - https://github.com/polopolyps/pcmd
+* The CQ Unix Toolkit is a similar toolset written in bash - https://github.com/Cognifide/CQ-Unix-Toolkit
+* The AEM Curl command reference was incredibly helpful during the development of acmd - https://gist.github.com/sergeimuller/2916697
+* oak-run is a another great command line tool for maintaining AEM instances - https://github.com/apache/jackrabbit-oak/tree/trunk/oak-run

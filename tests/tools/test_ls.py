@@ -1,13 +1,12 @@
 # coding: utf-8
-from StringIO import StringIO
-
 from mock import patch
 from httmock import urlmatch, HTTMock
 from nose.tools import eq_
 
-from acmd import get_tool, Server
-from acmd.tools.jcr import parse_properties
+from acmd import tool_repo, Server
 
+from test_utils.console import unordered_list
+from test_utils.compat import StringIO
 
 CONTENT_RESPONSE = """{
     "jcr:primaryType": "nt:folder",
@@ -53,7 +52,7 @@ NODE_RESPONSE = """{
 
 
 @urlmatch(netloc='localhost:4502', method='GET')
-def service_mock(url, request):
+def service_mock(url, _):
     if url.path == '/content/path.1.json':
         return PATH_RESPONSE
     else:
@@ -64,11 +63,11 @@ def service_mock(url, request):
 @patch('sys.stderr', new_callable=StringIO)
 def test_ls(stderr, stdout):
     with HTTMock(service_mock):
-        tool = get_tool('ls')
+        tool = tool_repo.get_tool('ls')
         server = Server('localhost')
         status = tool.execute(server, ['ls', '/content/path'])
         eq_(0, status)
-        eq_('node\ndirectory\n', stdout.getvalue())
+        eq_({'node', 'directory', ''}, set(stdout.getvalue().split('\n')))
         eq_('', stderr.getvalue())
 
 
@@ -77,10 +76,9 @@ def test_ls(stderr, stdout):
 @patch('sys.stdin', new=StringIO("/content/path\n"))
 def test_ls_stdin(stderr, stdout):
     with HTTMock(service_mock):
-        tool = get_tool('ls')
+        tool = tool_repo.get_tool('ls')
         server = Server('localhost')
         status = tool.execute(server, ['ls'])
         eq_(0, status)
-        eq_('node\ndirectory\n', stdout.getvalue())
+        eq_({'node', 'directory'}, unordered_list(stdout.getvalue()))
         eq_('', stderr.getvalue())
-

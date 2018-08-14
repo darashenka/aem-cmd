@@ -1,10 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
 import os
+from imp import reload
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 from acmd.main import main
+
+reload(sys)
 
 if __name__ == '__main__':
     try:

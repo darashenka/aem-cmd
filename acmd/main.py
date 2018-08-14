@@ -4,6 +4,7 @@ import sys
 import optparse
 
 import acmd
+import acmd.tools
 
 USAGE = """acmd [options] <tool> <args>
     Run 'acmd help' for list of available tools"""
@@ -11,27 +12,12 @@ USAGE = """acmd [options] <tool> <args>
 parser = optparse.OptionParser(USAGE)
 parser.add_option("-s", "--server", dest="server",default=os.getenv("ACMD_SERVER","default_server"),
                   help="server name", metavar="<name>")
-parser.add_option("-v", "--verbose",
-                  action="store_const", const=True, dest="verbose",
-                  help="verbose logging useful for debugging")
-parser.add_option("-V", "--version",
+parser.add_option("-v", "--version",
                   action="store_const", const=True, dest="show_version",
                   help="Show package version")
-
-
-def load_projects(projects):
-    """ Load any user specified tools directories.
-        Expecting dict of {<prefix>: <path>} """
-    ret = {}
-    for name, path in projects.items():
-        acmd.log("Loading project {}".format(name))
-        path = os.path.expanduser(path)
-        sys.path.insert(1, path)
-        init_file = os.path.join(path, '__init__.py')
-        acmd.set_current_project(name)
-        acmd.import_tools(init_file)
-        ret[name] = path
-    return ret
+parser.add_option("--verbose",
+                  action="store_const", const=True, dest="verbose",
+                  help="verbose logging useful for debugging")
 
 
 def run(options, config, args, cmdargs):
@@ -41,12 +27,18 @@ def run(options, config, args, cmdargs):
         sys.stderr.write("error: server '{srv}' not found.\n".format(srv=options.server))
         return acmd.USER_ERROR
     acmd.log("Using server {}".format(server))
-    cmd = acmd.get_tool(tool_name)
-    if cmd is None:
+
+    _tool = acmd.tool_repo.get_tool(tool_name)
+    _tool.config = config
+
+    if _tool is None:
         sys.stderr.write("error: tool '{cmd}' not found.\n".format(cmd=tool_name))
         return acmd.USER_ERROR
     else:
-        return cmd.execute(server, cmdargs)
+        status = _tool.execute(server, cmdargs)
+        if status is None:
+            raise Exception("Unexpected error, tool {} should return valid status code".format(tool_name))
+        return status
 
 
 def split_argv(argv):
@@ -54,22 +46,36 @@ def split_argv(argv):
         and tool arguments afterwards.
         ['foo', 'bar', 'inspect', 'bink', 'bonk']
             => (['foo', 'bar', 'inspect'], ['inspect', 'bink', 'bonk'])"""
+    acmd.log("Splitting {}".format(argv))
     for i, arg in enumerate(argv):
-        if acmd.get_tool(arg) is not None:
-            return argv[0:i + 1], argv[i:]
+        acmd.log("Checking for {}".format(arg))
+        if acmd.tool_repo.has_tool(arg):
+            left = argv[0:i + 1]
+            right = argv[i:]
+            acmd.log("Splitting args in {} and {}".format(left, right))
+            return left, right
     return argv, []
 
 
-def main(argv):
-    rcfilename = acmd.get_rcfilename()
-    if not os.path.isfile(rcfilename):
-        acmd.setup_rcfile(rcfilename)
-    config = acmd.read_config(rcfilename)
-    load_projects(config.projects)
+def _is_verbose(argv):
+    """ Doing this the low level way in order to init log as early as possible """
+    return '--verbose' in argv
+
+
+def main(argv, rcfile=None):
+    acmd.init_log(_is_verbose(argv))
+
+    if not rcfile:
+        rcfile = acmd.get_rcfilename()
+    if not os.path.isfile(rcfile):
+        acmd.setup_rcfile(rcfile)
+    config = acmd.read_config(rcfile)
+    acmd.tools.init_default_tools(config)
+    acmd.import_projects(config.projects)
 
     sysargs, cmdargs = split_argv(argv)
+
     (options, args) = parser.parse_args(sysargs)
-    acmd.init_log(options.verbose)
 
     if options.show_version:
         sys.stdout.write("{}\n".format(acmd.__version__))

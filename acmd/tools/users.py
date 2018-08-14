@@ -1,13 +1,16 @@
 # coding: utf-8
-import sys
-import optparse
 import json
+import optparse
+import sys
 
 import requests
 
-from acmd import tool, html, parse_properties
 from acmd import USER_ERROR, SERVER_ERROR, OK, error
-from acmd.tools import get_argument, get_command, filter_system
+from acmd import tool
+from acmd.tools import get_argument, get_action, filter_system
+
+from acmd.util import html
+from acmd.util.props import parse_properties
 
 parser = optparse.OptionParser("acmd users <list|create|setprop> [options] <username> [arguments]")
 parser.add_option("-r", "--raw",
@@ -20,11 +23,12 @@ parser.add_option("-c", "--compact",
                   help="output only package name")
 
 
-@tool('users', ['list', 'create', 'setprop'])
+@tool('user', ['list', 'create', 'setprop'])
 class UserTool(object):
-    def execute(self, server, argv):
+    @staticmethod
+    def execute(server, argv):
         options, args = parser.parse_args(argv)
-        action = get_command(args, 'list')
+        action = get_action(args, 'list')
         actionarg = get_argument(args)
         if action == 'list' or action == 'ls':
             return list_users(server, options)
@@ -46,17 +50,18 @@ def list_users(server, options):
     if resp.status_code != 200:
         error("Failed to get users list:\n{}\n".format(resp.content))
         return SERVER_ERROR
-    data = resp.json()
+    data = json.loads(resp.content)
     if options.raw:
         sys.stdout.write("{}\n".format(json.dumps(data, indent=4)))
     if options.compact:
-        for initial, group in filter_system(data.items()):
-            for username, userdata in filter_system(group.items()):
+        for item in filter_system(data):
+            initial, group = item[0], item[1]
+            for username, userdata in filter_system(group):
                 sys.stdout.write("{}\n".format(username))
     else:
         sys.stdout.write("Available users:\n")
-        for initial, group in filter_system(data.items()):
-            for username, userdata in filter_system(group.items()):
+        for initial, group in filter_system(data):
+            for username, userdata in filter_system(group):
                 sys.stdout.write("    {}\n".format(username))
     return OK
 
@@ -64,7 +69,8 @@ def list_users(server, options):
 def create_user(server, options, username):
     """ curl -u admin:admin -FcreateUser= -FauthorizableId=testuser -Frep:password=abc123
             http://localhost:4502/libs/granite/security/post/authorizables """
-    assert len(username) > 0
+    assert len(username) > 0, "You must specify a username"
+    assert options.password, "Please specify a password with the -p option"
     form_data = {
         'createUser': '',
         'authorizableId': username,
@@ -96,7 +102,8 @@ def set_profile_properties(server, options, username, props):
     props = {'profile/' + k: v for k, v in props.items()}
     resp = requests.post(url, auth=server.auth, data=props)
     if resp.status_code != 200:
-        sys.stderr.write("error: Failed to set profile property on path {}, request returned {}\n".format(path, resp.status_code))
+        error("Failed to set profile property on path {}, request returned {}\n".format(
+            path, resp.status_code))
         return SERVER_ERROR
     if options.raw:
         sys.stdout.write("{}\n".format(resp.content))

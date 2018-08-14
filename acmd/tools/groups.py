@@ -6,9 +6,10 @@ import optparse
 import requests
 
 
-from acmd import tool, html
+from acmd import tool
+from acmd.util import html
 from acmd import USER_ERROR, SERVER_ERROR, OK, error
-from acmd.tools import get_command, get_argument, filter_system
+from acmd.tools import get_action, get_argument, filter_system
 
 parser = optparse.OptionParser("acmd groups <list|create|adduser> [options] <groupname> <username>")
 parser.add_option("-r", "--raw",
@@ -19,11 +20,12 @@ parser.add_option("-c", "--compact",
                   help="output only package name")
 
 
-@tool('groups', ['list', 'create', 'adduser'])
-class GroupsTool(object):
-    def execute(self, server, argv):
+@tool('group', ['list', 'create', 'adduser'])
+class GroupTool(object):
+    @staticmethod
+    def execute(server, argv):
         options, args = parser.parse_args(argv)
-        action = get_command(args, 'list')
+        action = get_action(args, 'list')
         groupname = get_argument(args)
         if action == 'list':
             return list_groups(server, options)
@@ -88,16 +90,16 @@ def list_groups(server, options):
     if resp.status_code != 200:
         error("Failed to get groups list:\n{}\n".format(resp.content))
         return SERVER_ERROR
-    data = resp.json()
+    data = json.loads(resp.content)
     if options.raw:
         sys.stdout.write("{}\n".format(json.dumps(data, indent=4)))
     elif options.compact:
-        for initial, group in filter_system(data.items()):
-            for groupname, userdata in filter_system(group.items()):
+        for initial, group in filter_system(data):
+            for groupname, userdata in filter_system(group):
                 sys.stdout.write("{}\n".format(groupname))
     else:
         sys.stdout.write("Available groups:\n")
-        for initial, group in filter_system(data.items()):
-            for username, userdata in filter_system(group.items()):
+        for initial, group in filter_system(data):
+            for username, userdata in filter_system(group):
                 sys.stdout.write("    {}\n".format(username))
     return OK
