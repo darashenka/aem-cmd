@@ -17,7 +17,7 @@ from acmd import OK, SERVER_ERROR, USER_ERROR
 from acmd import tool, log, error
 from acmd.util.props import parse_properties, format_multipart
 
-parser = optparse.OptionParser("acmd <ls|cat|find|mv|setprop|rmprop|lsprop> [options] <jcr path>")
+parser = optparse.OptionParser("acmd <ls|cat|diff|find|mv|setprop|rmprop|lsprop> [options] <jcr path>")
 parser.add_option("-r", "--raw",
                   action="store_const", const=True, dest="raw",
                   help="output raw response data")
@@ -91,7 +91,7 @@ class DiffTool(object):
 #        if type(path) == str:
 #            path = path.encode('utf-8')
         if self.options.progress:
-            print ". {}".format(path)
+            sys.stderr.write(". {}".format(path))
         pp = pprint.PrettyPrinter(indent=4)
         subnodes = list()
 
@@ -112,11 +112,11 @@ class DiffTool(object):
              if path_segment not in self.options.ignoreProps:
                if nodes1[path_segment] == nodes2[path_segment]:
                  if self.options.verbose:
-                      print "+:{} [{}]: {}".format(path,path_segment, nodes1[path_segment]) # same properties
+                      sys.stdout.write("+:{} [{}]: {}".format(path,path_segment, nodes1[path_segment])) # same properties
                else:
-                      print "-:{} [{}]: {} <==> {}".format(path, path_segment, nodes1[path_segment],nodes2[path_segment])
+                      sys.stdout.write( "-:{} [{}]: {} <==> {}".format(path, path_segment, nodes1[path_segment],nodes2[path_segment]))
            elif is_property(path_segment, nodes1[path_segment]) or is_property(path_segment,nodes2[path_segment]):
-               print "!:{} [{}]: {} <==> {}".format(path, path_segment, nodes1[path_segment],nodes2[path_segment])
+               sys.stdout.write("!:{} [{}]: {} <==> {}".format(path, path_segment, nodes1[path_segment],nodes2[path_segment]))
            else:
              if path_segment not in self.options.ignorePath:
                path2 = os.path.join(path,path_segment)
@@ -125,7 +125,7 @@ class DiffTool(object):
            del nodes1[path_segment]
            del nodes2[path_segment]
         if nodes2:
-           print "%:{} ??? {}".format(path,nodes2) # nodes present on server2 but not in server1
+           sys.stdout.write("%:{} ??? {}".format(path,nodes2)) # nodes present on server2 but not in server1
 
         if self.options.random:
            shuffle(subnodes)
@@ -138,10 +138,10 @@ class DiffTool(object):
         log("GETting service {}".format(url))
         resp = requests.get(url, auth=server.auth)
         if self.options.raw:
-            print "{} {} {}".format(resp.url,resp.status_code,resp.encoding)
-            print "{}".format(resp.text)
+            sys.stdout.write("{} {} {}".format(resp.url,resp.status_code,resp.encoding))
+            sys.stdout.write("{}".format(resp.text))
             if resp.status_code == 200:
-               print "{}".format(resp.json())
+               sys.stdout.write("{}".format(resp.json()))
 
         if resp.status_code != 200:
             raise Exception("error: Failed to get path {}{}, request returned {}\n".format(server,path, resp.status_code))
@@ -183,8 +183,8 @@ def list_node(server, options, path):
 
 
 def _list_nodes(path, nodes, full_path=False):
-    for path_segment in nodes:
-        if not is_property(path_segment, nodes[path_segment]):
+    for path_segment, data in nodes.items():
+        if not is_property(path_segment, data):
             _list_node(path, path_segment, full_path)
 
 
@@ -202,8 +202,9 @@ def _list_path(path):
 
 @tool('dl')
 class DownloadTool(object):
+    @staticmethod
     def execute(self, server, argv):
-        parser.set_usage("%prog dl <jcr-path>")
+        parser.set_usage("%prog dl <jcr-path> # download node as-is, without parsing")
         options, args = parser.parse_args(argv)
         if len(args) >= 2:
             path = args[1]
@@ -224,12 +225,11 @@ def dl_node(server, options, path):
     sys.stdout.write("{}\n".format(data))
     return OK
 
-@tool('lsprop')
+@tool('cat')
 class InspectTool(object):
-
     @staticmethod
     def execute(server, argv):
-        parser.set_usage("%prog lsprop <jcr-path>   # show properties")
+        parser.set_usage("%prog cat <jcr-path>   # show properties")
         options, args = parser.parse_args(argv)
         if len(args) >= 2:
             path = args[1]
@@ -252,42 +252,9 @@ def cat_node(server, options, path):
         sys.stdout.write("{}\n".format(json.dumps(data, indent=4)))
     else:
         for prop, data in data.items():
-#            print_property(prop, data)
             if is_property(prop, data):
                 sys.stdout.write("{key}:\t{value}\n".format(key=prop, value=data))
     return OK
-
-def print_property_value(data):
-    if type(data) == str:
-        data = data.encode('utf-8')
-        sys.stdout.write(data)
-
-    elif type(data) == unicode:
-        sys.stdout.write(data)
-
-    elif type(data) == list:
-        sys.stdout.write('[ ')
-        first=True
-        for i in data:
-            if not first:
-                sys.stdout.write(', ')
-            else:
-                first=False
-            print_property_value(i)
-        sys.stdout.write(' ]')
-    else:
-        sys.stdout.write("{}".format(data))
-
-def print_property(name,data):
-    if not is_property(name, data):
-        return
-
-    if type(data) == str or type(data) == unicode:
-        sys.stdout.write("{}:\t".format(name))
-    else: 
-        sys.stdout.write("{}[{}]:\t".format(name,type(data)))
-    print_property_value(data)
-    sys.stdout.write("\n")
 
 
 @tool('find')
@@ -335,71 +302,6 @@ def _get_subnodes(server, path):
 
 def is_property(_, data):
     return not isinstance(data, dict)
-
-
-@tool('cp')
-class CpTool(object):
-
-    def execute(self, server, argv):
-        parser.set_usage("%prog cp <src-jcr-path> [src-jcr-path...] [dst-jcr-path]   # copy nodes")
-        options, args = parser.parse_args(argv)
-        if len(args) < 3:
-            parser.print_help()
-            sys.exit(3)
-        args.pop(0)
-        dst = args.pop()
-
-        data = { ":operation": "copy", ":dest" : dst }
-        if len(args) == 1:
-           url = server.url(args.pop())
-        else:
-           url = server.url("/tmp/nonexistent")
-           data[ ":applyTo" ] = list()
-           for i in args:
-              data[ ":applyTo" ].append(i)
-
-        resp = requests.post(url, auth=server.auth,data=data)
-        if resp.status_code != 200 and resp.status_code != 201:
-            sys.stderr.write("error: Failed to copy, request returned {}\n".format(resp.status_code))
-            return SERVER_ERROR
-        if options.raw:
-            sys.stdout.write("{}\n".format(resp.content))
-        else:
-            sys.stdout.write("{}\n".format(dst))
-        return OK
-
-
-
-@tool('mv')
-class MvTool(object):
-
-    def execute(self, server, argv):
-        parser.set_usage("%prog mv <src-jcr-path> [src-jcr-path...] [dst-jcr-path]   # move nodes")
-        options, args = parser.parse_args(argv)
-        if len(args) < 3:
-            parser.print_help()
-            sys.exit(3)
-        args.pop(0)
-        dst = args.pop()
-
-        data = { ":operation": "move", ":dest" : dst }
-        if len(args) == 1:
-           url = server.url(args.pop())
-        else:
-           url = server.url("/tmp/nonexistent")
-           data[ ":applyTo" ] = list()
-           for i in args:
-             data[ ":applyTo" ].append(i)
-
-        resp = requests.post(url, auth=server.auth,data=data)
-        if resp.status_code != 200 and resp.status_code != 201:
-            sys.stderr.write("error: Failed to move, request returned {}\n".format(resp.status_code))
-            return SERVER_ERROR
-        if options.raw:
-            sys.stdout.write("{}\n".format(resp.content))
-        else:
-            sys.stdout.write("{}\n".format(dst))
-        return OK
 
 
 
@@ -519,6 +421,38 @@ def rm_node_properties(server, options, prop_names, path):
     return OK
 
 
+
+@tool('cp-multi')
+class CpTool(object):
+    @staticmethod
+    def execute(self, server, argv):
+        parser.set_usage("%prog cp <src-jcr-path> [src-jcr-path...] <dst-jcr-path>   # copy nodes")
+        options, args = parser.parse_args(argv)
+        if len(args) < 3:
+            parser.print_help()
+            sys.exit(3)
+        args.pop(0)
+        dst = args.pop()
+
+        data = { ":operation": "copy", ":dest" : dst }
+        if len(args) == 1:
+           url = server.url(args.pop())
+        else:
+           url = server.url("/tmp/nonexistent")
+           data[ ":applyTo" ] = list()
+           for i in args:
+              data[ ":applyTo" ].append(i)
+
+        resp = requests.post(url, auth=server.auth,data=data)
+        if resp.status_code != 200 and resp.status_code != 201:
+            sys.stderr.write("error: Failed to copy, request returned {}\n".format(resp.status_code))
+            return SERVER_ERROR
+        if options.raw:
+            sys.stdout.write("{}\n".format(resp.content))
+        else:
+            sys.stdout.write("{}\n".format(dst))
+        return OK
+
 @tool('cp')
 class CopyTool(object):
     @staticmethod
@@ -543,6 +477,39 @@ class CopyTool(object):
         msg = _result_folder(src_path, dst_path) if not options.raw else resp.content
         sys.stdout.write("{}\n".format(msg))
         return OK
+
+
+@tool('mv-multi')
+class MvTool(object):
+    @staticmethod
+    def execute(self, server, argv):
+        parser.set_usage("%prog mv-multi <src-jcr-path> [src-jcr-path...] [dst-jcr-path]   # move nodes")
+        options, args = parser.parse_args(argv)
+        if len(args) < 3:
+            parser.print_help()
+            sys.exit(3)
+        args.pop(0)
+        dst = args.pop()
+
+        data = { ":operation": "move", ":dest" : dst }
+        if len(args) == 1:
+           url = server.url(args.pop())
+        else:
+           url = server.url("/tmp/nonexistent")
+           data[ ":applyTo" ] = list()
+           for i in args:
+             data[ ":applyTo" ].append(i)
+
+        resp = requests.post(url, auth=server.auth,data=data)
+        if resp.status_code != 200 and resp.status_code != 201:
+            sys.stderr.write("error: Failed to move, request returned {}\n".format(resp.status_code))
+            return SERVER_ERROR
+        if options.raw:
+            sys.stdout.write("{}\n".format(resp.content))
+        else:
+            sys.stdout.write("{}\n".format(dst))
+        return OK
+
 
 
 @tool('mv')

@@ -34,19 +34,19 @@ def optimize(server, options):
     url = server.url(OPT_PATH)
     resp = requests.post(url, auth=server.auth)
     if resp.status_code != 200:
-        error("Failed to trigger Tar Optimization because: {}".format(resp.content))
+        error("Failed to trigger Tar Optimization because: {}".format(resp.content.decode('utf-8')))
         return -1
     else:
         if options.raw:
-            sys.stdout.write("{}".format(resp.content))
+            sys.stdout.write("{}".format(resp.content.decode('utf-8')))
 
 
 def garbage_collect(server, options):
     url = server.url(GC_PATH)
     resp = requests.post(url, auth=server.auth)
     if resp.status_code != 200:
-        error("Failed to trigger Tar Optimization because: {}".format(resp.content))
+        error("Failed to trigger Tar Optimization because: {}".format(resp.content.decode('utf-8')))
         return -1
     else:
         if options.raw:
-            sys.stdout.write("{}".format(resp.content))
+            sys.stdout.write("{}".format(resp.content.decode('utf-8')))

@@ -72,9 +72,9 @@ def list_workflow_models(server, options):
     resp = requests.get(url, auth=server.auth)
     if resp.status_code != 200:
         error("Unexpected error code {code}: {content}".format(
-            code=resp.status_code, content=resp.content))
+            code=resp.status_code, content=resp.content.decode('utf-8')))
         return SERVER_ERROR
-    data = json.loads(resp.content)
+    data = json.loads(resp.content.decode('utf-8'))
     if options.raw:
         sys.stdout.write(json.dumps(data, indent=4))
     else:

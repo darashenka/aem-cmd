@@ -84,7 +84,7 @@ def make_packages_request(server):
     resp = requests.post(url, auth=(server.username, server.password), files=form_data)
     if resp.status_code != 200:
         raise Exception("Failed to get " + url)
-    return resp.content
+    return resp.content.decode('utf-8')
 
 
 def get_packages_list(server):
@@ -205,6 +205,9 @@ def upload_package(server, options, filename):
         file=(filename, open(filename, 'rb'), 'application/zip', dict()),
         name=filename.rstrip('.zip'),
         strict="true",
+        recursive="true",
+        acHandling="",
+        dependencyHandling="required",
         install=json_bool(options.install)
     )
     log(form_data)
@@ -216,11 +219,11 @@ def upload_package(server, options, filename):
     if resp.status_code != 200:
         error('Failed to upload paackage: {}: {}'.format(resp.status_code, resp.content))
         if options.raw:
-            sys.stdout.write("{}\n".format(resp.content))
+            sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
         return SERVER_ERROR
     else:
         try:
-            tree = ElementTree.fromstring(resp.content)
+            tree = ElementTree.fromstring(resp.content.decode('utf-8'))
             pkg_elem = tree.find('response').find('data').find('package')
             pkg = parse_package(pkg_elem)
             sys.stdout.write("{}\n".format(format_package(pkg)))
@@ -240,17 +243,22 @@ def install_package(server, options, package_name):
     """ curl -u admin:admin -X POST \
         http://localhost:4505/crx/packmgr/service/.json/etc/packages/export/name of package?cmd=install """
     url = get_package_url(package_name, server, options)
-    form_data = dict(cmd='install')
+    form_data = dict(
+        recursive="true",
+        acHandling="",
+        dependencyHandling="required",
+        cmd='install'
+    )
 
     log("Installing package with POST to {}".format(url))
     resp = requests.post(url, auth=server.auth, data=form_data)
     if resp.status_code != 200:
         error("Failed to install package: {}".format(resp.content))
         return SERVER_ERROR
-    data = json.loads(resp.content)
+    data = json.loads(resp.content.decode('utf-8'))
     assert data['success'] is True
     if options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
+        sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
     else:
         sys.stdout.write("{}\n".format(data['msg']))
     return OK
@@ -262,10 +270,10 @@ def uninstall_package(server, options, package_name):
     log("Uninstalling package with POST to {}".format(url))
     resp = requests.post(url, auth=server.auth, data=form_data)
     if resp.status_code != 200:
-        error("Failed to uninstall package: {}".format(resp.content))
+        error("Failed to uninstall package: {}".format(resp.content.decode('utf-8')))
         return SERVER_ERROR
     if options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
+        sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
     return OK
 
 def delete_package(server, options, package_name):
@@ -275,10 +283,10 @@ def delete_package(server, options, package_name):
     log("Deleting package with POST to {}".format(url))
     resp = requests.post(url, auth=server.auth, data=form_data)
     if resp.status_code != 200:
-        error("Failed to delete package: {}".format(resp.content))
+        error("Failed to delete package: {}".format(resp.content.decode('utf-8')))
         return SERVER_ERROR
     if options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
+        sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
     return OK
 
 
@@ -289,10 +297,10 @@ def uninstall_package(server, options, package_name):
     log("Uninstalling package with POST to {}".format(url))
     resp = requests.post(url, auth=server.auth, data=form_data)
     if resp.status_code != 200:
-        error("Failed to uninstall package: {}".format(resp.content))
+        error("Failed to uninstall package: {}".format(resp.content.decode('utf-8')))
         return SERVER_ERROR
     if options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
+        sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
     return OK
 
 
@@ -304,10 +312,10 @@ def build_package(server, options, package_name):
 
     resp = requests.post(url, auth=server.auth, data=form_data)
     if resp.status_code != 200:
-        error("Failed to rebuild package: {}".format(resp.content))
+        error("Failed to rebuild package: {}".format(resp.content.decode('utf-8')))
         return SERVER_ERROR
     if options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
+        sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
     return OK
 
 

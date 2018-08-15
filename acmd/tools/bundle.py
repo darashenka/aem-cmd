@@ -45,7 +45,7 @@ def get_bundle_list(server):
     if response.status_code != 200:
         error("Failed to list bundles: {}".format(response.status_code))
         return []
-    bundles = json.loads(response.content)['data']
+    bundles = json.loads(response.content.decode('utf-8'))['data']
     return bundles
 
 
@@ -61,6 +61,7 @@ def list_bundles(server, options):
                 bundle=bundle['symbolicName'],
                 version=bundle['version'],
                 status=bundle['state']))
+    return 0
 
 
 def stop_bundle(server, bundlename, options):
@@ -74,7 +75,8 @@ def stop_bundle(server, bundlename, options):
         error("Failed to stop bundle {bundle}: {status}".format(bundle=bundlename, status=resp.status_code))
         return -1
     elif options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
+        sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
+    return 0
 
 
 def start_bundle(server, bundlename, options):
@@ -85,4 +87,5 @@ def start_bundle(server, bundlename, options):
     log("POSTing to service {}".format(url))
     resp = requests.post(url, auth=(server.username, server.password), data=form_data)
     if options.raw:
-        sys.stdout.write("{}\n".format(resp.content))
+        sys.stdout.write("{}\n".format(resp.content.decode('utf-8')))
+    return 0
